@@ -1,0 +1,29 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "أم",
+      "password": "123456",
+      "role": "admin"
+    },
+    {
+      "id": 1793038234622,
+      "name": "محمد",
+      "password": "123",
+      "role": "user"
+    },
+    {
+      "id": 1,
+      "name": "ام",
+      "password": "123456",
+      "role": "admin"
+    }
+  ],
+  "logs": [
+    {
+      "id": 1793041762490,
+      "user_name": "مؤمن",
+      "created_at": "٢٦‏/١٠‏/٢٠٢٦، ٩:٠٩:٢٢ م"
+    }
+  ]
+}

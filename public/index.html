@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام كبّ الزبالة الذكي ♻️</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="light-mode">
+    <div id="app-container">
+        <!-- Authentication Screen -->
+        <div id="auth-screen" class="screen">
+            <div class="glass-card auth-card">
+                <h1>♻️ نظام كبّ الزبالة</h1>
+                <p class="subtitle">إدارة ذكية، لحظية، وممتعة</p>
+                
+                <div class="tabs">
+                    <button class="tab-btn active" id="tab-login" onclick="switchTab('login')">دخول</button>
+                    <button class="tab-btn" id="tab-signup" onclick="switchTab('signup')">حساب جديد</button>
+                </div>
+
+                <div id="login-form" class="form-container">
+                    <input type="text" id="login-name" placeholder="اسم المستخدم">
+                    <input type="password" id="login-pass" placeholder="كلمة المرور">
+                    <button class="main-btn" onclick="handleLogin()">دخول</button>
+                </div>
+
+                <div id="signup-form" class="form-container" style="display: none;">
+                    <input type="text" id="signup-name" placeholder="الاسم (مثلاً: محمد)">
+                    <input type="password" id="signup-pass" placeholder="كلمة المرور">
+                    <button class="main-btn" onclick="handleSignup()">إنشاء الحساب</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Application Screen -->
+        <div id="main-screen" class="screen" style="display: none;">
+            <header class="glass-nav">
+                <div class="user-info">
+                    <span id="user-badge" class="badge">...</span>
+                </div>
+                <div class="nav-actions">
+                    <button class="icon-btn" onclick="toggleTheme()" title="تغيير الثيم">🌓</button>
+                    <button class="icon-btn" onclick="handleLogout()" title="خروج">🚪</button>
+                </div>
+            </header>
+
+            <main class="content">
+                <div class="dashboard">
+                    <div class="stats-grid" id="stats-grid"></div>
+                </div>
+
+                <div class="glass-card turn-card" id="turn-container">
+                    <h3 id="turn-title">الورقة على...</h3>
+                    <p id="next-person">جاري التحميل...</p>
+                </div>
+
+                <div class="glass-card action-card" id="main-action-card">
+                    <!-- User Controls -->
+                    <div id="user-controls" style="display: none;">
+                        <button class="action-btn primary" onclick="logMe()">🗑️ أنا كبّيت الزبالة الآن</button>
+                    </div>
+
+                    <!-- Admin Controls -->
+                    <div id="admin-controls" style="display: none;">
+                        <div class="admin-add-row">
+                            <select id="admin-member-select">
+                                <option value="محمد">محمد</option>
+                                <option value="مؤمن">مؤمن</option>
+                            </select>
+                            <button class="action-btn admin-add-btn" onclick="adminLog()">➕ إضافة سجل</button>
+                        </div>
+                        <div class="admin-tools-row">
+                            <button class="action-btn danger" onclick="undo()">🔄 تراجع</button>
+                            <button class="action-btn danger" onclick="clearAll()">🧹 مسح الكل</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-card history-card">
+                    <h3 id="history-title">📜 سجل العمليات (مباشر)</h3>
+                    <div id="logs-list" class="logs-list"></div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <audio id="sound-success" src="https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3"></audio>
+    <audio id="sound-error" src="https://assets.mixkit.co/active_storage/sfx/2003/2003-preview.mp3"></audio>
+
+    <script src="app.js"></script>
+</body>
+</html>
