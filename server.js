@@ -2,76 +2,94 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" }
-});
+const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(cors());
 app.use(express.json());
 
-// التأكد من تقديم الملفات الثابتة من مجلد public
 const publicPath = path.join(__dirname, 'public');
 app.use(express.static(publicPath));
+app.get('/', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
 
-// حل مشكلة Cannot GET / عن طريق توجيه الرابط الرئيسي لملف index.html
-app.get('/', (req, res) => {
-  res.sendFile(path.join(publicPath, 'index.html'));
-});
+// Supabase config (set these in Render Environment Variables)
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
 
-const DB_FILE = './database.json';
+async function sbFetch(table, opts = {}) {
+  if (!SUPABASE_URL) throw new Error('SUPABASE_URL not set');
+  const url = new URL(`/rest/v1/${table}`, SUPABASE_URL);
+  if (opts.select) url.searchParams.set('select', opts.select);
+  if (opts.eq) url.searchParams.set('id', `eq.${opts.eq}`);
+  if (opts.limit) url.searchParams.set('limit', String(opts.limit));
+  if (opts.order) url.searchParams.set('order', opts.order);
 
-// Database Logic (JSON based)
-let data = { users: [], logs: [] };
+  const headers = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': opts.prefer || 'return=representation'
+  };
 
-if (fs.existsSync(DB_FILE)) {
-  data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+  const res = await fetch(url.toString(), {
+    method: opts.method || 'GET',
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error('Supabase error:', errText);
+    throw new Error(errText);
+  }
+  if (res.status === 204) return null;
+  return res.json();
 }
 
-function saveDB() {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
-}
-
-// Seed Admin (using 'ام' without Hamza)
-if (!data.users.find(u => u.name === 'ام')) {
-  data.users.push({ id: 1, name: 'ام', password: '123456', role: 'admin' });
-  saveDB();
-}
+const sessions = new Map();
 
 // Middleware
-const auth = (req, res, next) => {
+const auth = async (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
   if (!token || !sessions.has(token)) return res.status(401).json({ error: 'Unauthorized' });
   req.user = sessions.get(token);
   next();
 };
 
-const sessions = new Map();
-
 // Auth Routes
-app.post('/api/auth/signup', (req, res) => {
+app.post('/api/auth/signup', async (req, res) => {
   const { name, password } = req.body;
   if (!name || !password) return res.status(400).json({ error: 'Missing credentials' });
-  if (data.users.find(u => u.name === name)) return res.status(400).json({ error: 'Username exists' });
-  
-  data.users.push({ id: Date.now(), name, password, role: 'user' });
-  saveDB();
-  res.json({ ok: true });
+  try {
+    await sbFetch('users', {
+      method: 'POST',
+      body: { name, password, role: 'user' },
+      prefer: 'return=minimal'
+    });
+    res.json({ ok: true });
+  } catch (e) { res.status(400).json({ error: 'Username exists' }); }
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { name, password } = req.body;
-  const user = data.users.find(u => u.name === name && u.password === password);
-  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-  
-  const token = crypto.randomBytes(24).toString('hex');
-  sessions.set(token, { id: user.id, name: user.name, role: user.role });
-  res.json({ token, user: { name: user.name, role: user.role } });
+  try {
+    const users = await sbFetch('users', {
+      select: '*',
+      method: 'GET',
+      filter: `name=eq.${name}`
+    });
+    // Note: simple filter above; for simplicity check result length
+    const user = users?.find ? users.find(u => u.name === name && u.password === password) : null;
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    const token = crypto.randomBytes(24).toString('hex');
+    sessions.set(token, { id: user.id, name: user.name, role: user.role });
+    res.json({ token, user: { name: user.name, role: user.role } });
+  } catch (e) {
+    res.status(401).json({ error: 'Invalid credentials' });
+  }
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -85,41 +103,55 @@ app.get('/api/auth/me', auth, (req, res) => {
 });
 
 // Data Routes
-app.get('/api/logs', auth, (req, res) => {
-  res.json([...data.logs].reverse());
+app.get('/api/logs', auth, async (req, res) => {
+  try {
+    const logs = await sbFetch('logs', {
+      select: '*',
+      order: 'id.desc',
+      limit: '100'
+    });
+    res.json(logs || []);
+  } catch (e) { res.status(500).json({ error: 'Failed to fetch logs' }); }
 });
 
-app.post('/api/logs', auth, (req, res) => {
+app.post('/api/logs', auth, async (req, res) => {
   const { user_name } = req.body;
   if (!user_name) return res.status(400).json({ error: 'Missing user_name' });
-  
-  const newLog = {
-    id: Date.now(),
-    user_name,
-    created_at: new Date().toLocaleString('ar-SA')
-  };
-  
-  data.logs.unshift(newLog);
-  saveDB();
-  io.emit('logs_updated', data.logs);
-  res.json({ ok: true });
+  try {
+    await sbFetch('logs', {
+      method: 'POST',
+      body: { user_name, created_at: new Date().toLocaleString('ar-SA') },
+      prefer: 'return=minimal'
+    });
+    io.emit('logs_updated');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Failed' }); }
 });
 
-app.delete('/api/logs/:id', auth, (req, res) => {
+app.delete('/api/logs/:id', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-  const id = parseInt(req.params.id);
-  data.logs = data.logs.filter(l => l.id !== id);
-  saveDB();
-  io.emit('logs_updated', data.logs);
-  res.json({ ok: true });
+  try {
+    await sbFetch('logs', {
+      method: 'DELETE',
+      eq: req.params.id,
+      prefer: 'return=minimal'
+    });
+    io.emit('logs_updated');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Failed' }); }
 });
 
-app.delete('/api/logs', auth, (req, res) => {
+app.delete('/api/logs', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-  data.logs = [];
-  saveDB();
-  io.emit('logs_updated', data.logs);
-  res.json({ ok: true });
+  try {
+    await sbFetch('logs', {
+      method: 'DELETE',
+      select: '*',
+      prefer: 'return=minimal'
+    });
+    io.emit('logs_updated');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Failed' }); }
 });
 
 const PORT = process.env.PORT || 3000;
