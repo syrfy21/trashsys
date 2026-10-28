@@ -51,6 +51,24 @@ async function sbFetch(table, opts = {}) {
 
 const sessions = new Map();
 
+// Seed admin user in Supabase if not exists
+async function seedAdmin() {
+  try {
+    const users = await sbFetch('users', { select: '*', filter: `name=eq.ام` });
+    if (!users || users.length === 0) {
+      await sbFetch('users', {
+        method: 'POST',
+        body: { name: 'ام', password: '123456', role: 'admin' },
+        prefer: 'return=minimal'
+      });
+      console.log('Admin user (ام) seeded in Supabase');
+    }
+  } catch (e) {
+    console.log('Admin seed skipped:', e.message);
+  }
+}
+seedAdmin();
+
 // Middleware
 const auth = async (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
