@@ -162,11 +162,15 @@ app.delete('/api/logs/:id', auth, async (req, res) => {
 app.delete('/api/logs', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
   try {
-    await sbFetch('logs', {
-      method: 'DELETE',
-      select: '*',
-      prefer: 'return=minimal'
-    });
+    const url = new URL('/rest/v1/logs?id=gte.0', SUPABASE_URL);
+    const headers = {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    };
+    const resFetch = await fetch(url.toString(), { method: 'DELETE', headers });
+    if (!resFetch.ok) { const errText = await resFetch.text(); throw new Error(errText); }
     io.emit('logs_updated');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: 'Failed' }); }
